@@ -14,6 +14,8 @@ from typing import (
     cast,
 )
 
+from aiostream import stream as async_stream
+
 from llama_index.agent.react.formatter import ReActChatFormatter
 from llama_index.agent.react.output_parser import ReActOutputParser
 from llama_index.agent.react.types import (
@@ -30,15 +32,14 @@ from llama_index.callbacks import (
     trace_method,
 )
 from llama_index.chat_engine.types import AgentChatResponse, StreamingAgentChatResponse
-from llama_index.llms.llm import LLM
+from llama_index.llms.base import LLM, ChatMessage, ChatResponse, MessageRole
 from llama_index.llms.openai import OpenAI
-from llama_index.llms.types import ChatMessage, ChatResponse, MessageRole
 from llama_index.memory.chat_memory_buffer import ChatMemoryBuffer
 from llama_index.memory.types import BaseMemory
 from llama_index.objects.base import ObjectRetriever
 from llama_index.tools import BaseTool, ToolOutput, adapt_to_async_tool
 from llama_index.tools.types import AsyncBaseTool
-from llama_index.utils import print_text, unit_generator
+from llama_index.utils import async_unit_generator, print_text, unit_generator
 
 DEFAULT_MODEL_NAME = "gpt-3.5-turbo-0613"
 
@@ -246,10 +247,19 @@ class ReActAgent(BaseAgent):
         """Get response from reasoning steps."""
         if len(current_reasoning) == 0:
             raise ValueError("No reasoning steps were taken.")
-        elif len(current_reasoning) == self._max_iterations:
-            raise ValueError("Reached max iterations.")
 
-        response_step = cast(ResponseReasoningStep, current_reasoning[-1])
+        if hasattr(current_reasoning[-1], 'response'):
+            response = current_reasoning[-1].response
+        elif hasattr(current_reasoning[-1], 'observation'):
+            response = current_reasoning[-1].observation
+        else:
+            response = ""
+        response_step = ResponseReasoningStep(
+            thought="(Implicit) I can answer without any more tools!",
+            response=response,
+            is_streaming=False,
+        )
+        # response_step = cast(ResponseReasoningStep, current_reasoning[-1])
 
         # TODO: add sources from reasoning steps
         return AgentChatResponse(response=response_step.response, sources=self.sources)
@@ -301,7 +311,7 @@ class ReActAgent(BaseAgent):
         )
         return updated_stream_c
 
-    async def _async_add_back_chunk_to_stream(
+    def _async_add_back_chunk_to_stream(
         self, chunk: ChatResponse, chat_stream: AsyncGenerator[ChatResponse, None]
     ) -> AsyncGenerator[ChatResponse, None]:
         """Helper method for adding back initial chunk stream of final response
@@ -316,9 +326,17 @@ class ReActAgent(BaseAgent):
         Return:
             AsyncGenerator[ChatResponse, None]: the updated async chat_stream
         """
-        yield chunk
-        async for item in chat_stream:
-            yield item
+        updated_stream = (
+            async_stream.combine.merge(  # need to add back partial response chunk
+                async_unit_generator(chunk),
+                chat_stream,
+            )
+        )
+        # use cast to avoid mypy issue with Stream and AsyncGenerator
+        updated_stream_c: AsyncGenerator[ChatResponse, None] = cast(
+            AsyncGenerator[ChatResponse, None], updated_stream
+        )
+        return updated_stream_c
 
     @trace_method("chat")
     def chat(

@@ -4,7 +4,6 @@
 import ast
 import json
 import re
-import yaml
 from typing import Tuple
 
 from llama_index.agent.react.types import (
@@ -17,7 +16,7 @@ from llama_index.types import BaseOutputParser
 
 
 def extract_tool_use(input_text: str) -> Tuple[str, str, str]:
-    pattern = r"\s*Thought:(.*?)Action:(.*?)Action Input:(.*?)(?:\n|$)"
+    pattern = r"\s*Thought: (.*?)\nAction: ([a-zA-Z0-9_]+).*?\nAction Input: (\{.*?\})"
 
     match = re.search(pattern, input_text, re.DOTALL)
     if not match:
@@ -78,29 +77,7 @@ class ReActOutputParser(BaseOutputParser):
             )
 
         if "Action:" in output and "Action Input:" in output:
-            if "{\n" in output or "\n}" in output:
-                target_index = output.find("{\n")
-                output =  output[:target_index] + output[target_index:].replace("\n", "")
-
             thought, action, action_input = extract_tool_use(output)
-            stack = []
-            extra_chars = []
-            pairs = {"}": "{", "]": "[", ")": "("}
-            for c in action_input:
-                if c in "([{":
-                    stack.append(c)
-                elif c in ")]}":
-                    if pairs[c] == stack[-1]:
-                        stack.pop()
-                    else:
-                        extra_chars.append(c)
-            if len(stack) > 0:
-                raise ValueError(f"Unbalanced action_input: {action_input}")
-            while len(extra_chars) > 0:
-                action_input = "".join(action_input.rsplit(extra_chars.pop(), 1))
-
-
-
             json_str = extract_json_str(action_input)
 
             # First we try json, if this fails we use ast
@@ -108,19 +85,17 @@ class ReActOutputParser(BaseOutputParser):
                 action_input_dict = json.loads(json_str)
             except json.JSONDecodeError:
                 try:
-                    action_input_dict = ast.literal_eval(json_str)
-                except:
-                    action_input_dict = yaml.load(json_str, yaml.SafeLoader)
+                    from helpers import parsingHelper
+                    action_input_dict = parsingHelper.action_input_parser(json_str)
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not parse action input: {json_str} with error: {e}"
+                    )
 
             return ActionReasoningStep(
                 thought=thought, action=action, action_input=action_input_dict
             )
-
-        if "Response:" in output:
-            return ResponseReasoningStep(
-                thought="(Implicit) I can answer without any more tools!", response=output,
-                is_streaming=is_streaming
-            )
+        
         raise ValueError(f"Could not parse output: {output}")
 
     def format(self, output: str) -> str:

@@ -85,11 +85,11 @@ class ReActOutputParser(BaseOutputParser):
             thought, action, action_input = extract_tool_use(output)
             stack = []
             extra_chars = []
-            pairs = {"}": "{", "]": "[", ")": "(", "\"": "\""}
+            pairs = {"}": "{", "]": "[", ")": "("}
             for c in action_input:
-                if c in "([{\"":
+                if c in "([{":
                     stack.append(c)
-                elif c in "\")]}":
+                elif c in ")]}":
                     if pairs[c] == stack[-1]:
                         stack.pop()
                     else:

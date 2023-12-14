@@ -34,7 +34,7 @@ maintainers = [
     "Alan Luu <aluu@nohold.com>"
 ]
 name = "custom-llama-index"
-packages = [{include = "."}]
+packages = [{include = "llama_index"}]
 repository = "https://github.com/run-llama/llama_index"
 version = "0.9.13"
 

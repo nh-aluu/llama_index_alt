@@ -4,7 +4,6 @@
 import ast
 import json
 import re
-import yaml
 from typing import Tuple
 
 from llama_index.agent.react.types import (
@@ -17,7 +16,8 @@ from llama_index.types import BaseOutputParser
 
 
 def extract_tool_use(input_text: str) -> Tuple[str, str, str]:
-    pattern = r"\s*Thought:(.*?)Action:(.*?)Action Input:(.*?)(?:\n|$)"
+    #pattern = r"\s*Thought: (.*?)\nAction: (.*?)\nAction Input: (\{.*?\})"
+    pattern = r"\s*Thought: (.*?)\nAction: ([a-zA-Z0-9_]+).*?\nAction Input: (\{.*?\})"
 
     match = re.search(pattern, input_text, re.DOTALL)
     if not match:
@@ -107,19 +107,17 @@ class ReActOutputParser(BaseOutputParser):
             except json.JSONDecodeError:
                 try:
                     action_input_dict = ast.literal_eval(json_str)
-                except:
-                    action_input_dict = yaml.load(json_str, yaml.SafeLoader)
+                except Exception as e:
+                    raise ValueError(
+                        f"Could not parse action input: {json_str} with error: {e}"
+                    )
 
             return ActionReasoningStep(
                 thought=thought, action=action, action_input=action_input_dict
             )
-
-        if "Response:" in output:
-            return ResponseReasoningStep(
-                thought="(Implicit) I can answer without any more tools!", response=output,
-                is_streaming=is_streaming
-            )
-        raise ValueError(f"Could not parse output: {output}")
+        from helpers import parsingHelper
+        return parsingHelper.response_parser(output, is_streaming)
+        #raise ValueError(f"Could not parse output: {output}")
 
     def format(self, output: str) -> str:
         """Format a query with structured output formatting instructions."""

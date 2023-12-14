@@ -79,7 +79,7 @@ class Replicate(CustomLLM):
         }
 
     def _get_input_dict(self, prompt: str, **kwargs: Any) -> Dict[str, Any]:
-        return {self.prompt_key: prompt, **self._model_kwargs, **kwargs}
+        return {self.prompt_key: prompt, "prompt":prompt, **self._model_kwargs, **kwargs}
 
     @llm_chat_callback()
     def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:

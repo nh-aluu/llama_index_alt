@@ -406,7 +406,7 @@ class BaseIndex(Generic[IS], ABC):
 
             if chat_mode == ChatMode.REACT:
                 if "tools2" in kwargs:
-                    query_engine_tool = kwargs["tools2"][0]                      
+                    query_engine_tool = kwargs["tools2"][0]
                 return ReActAgent.from_tools(
                     tools=[query_engine_tool],
                     llm=llm,
